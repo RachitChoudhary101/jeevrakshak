@@ -39,13 +39,19 @@ async function createCase(data: ReportInputType, reporterId: string | null) {
 
   let photoPath: string | null = null;
   if (data.imageDataUrl) {
-    const base64 = data.imageDataUrl.split(",").pop() ?? "";
-    const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
-    photoPath = `cases/${crypto.randomUUID()}.jpg`;
-    const { error } = await supabaseAdmin.storage
-      .from("animal-photos")
-      .upload(photoPath, bytes, { contentType: "image/jpeg", upsert: false });
-    if (error) photoPath = null;
+    // A malformed image must never block the emergency report: skip the photo, keep the case.
+    try {
+      const base64 = data.imageDataUrl.split(",").pop() ?? "";
+      const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+      photoPath = `cases/${crypto.randomUUID()}.jpg`;
+      const { error } = await supabaseAdmin.storage
+        .from("animal-photos")
+        .upload(photoPath, bytes, { contentType: "image/jpeg", upsert: false });
+      if (error) photoPath = null;
+    } catch {
+      console.warn("[report] Photo could not be decoded or stored; saving the report without it.");
+      photoPath = null;
+    }
   }
 
   let trackingCode = makeCode();
